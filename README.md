@@ -25,7 +25,7 @@
 
 # Work-in-progress
 This bootstrap compiler implements parser, semantic analysis and enforcement, and the transpiler.
-It still lacks: structs and methods, enums, sin (unsafe) blocks.
+It still lacks: structs and methods, enums, unsafe blocks.
 
 # Compiling the bootstrap compiler.
 **Note**: The latest commit in main branch is always the latest stable release.
