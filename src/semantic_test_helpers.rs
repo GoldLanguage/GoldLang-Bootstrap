@@ -1,6 +1,7 @@
 use crate::ast::{
     AST, Expr, Stmt, GlobalStmt, Type, Constant, IntLiteralValue, Span,
-    Function, Param, VariableDeclaration, VariableAssignment
+    Function, Param, VariableDeclaration, VariableAssignment,
+    BreakStmt
 };
 
 use crate::tests_consts::{
@@ -646,6 +647,12 @@ pub fn var_assign(name: &str, value: Expr) -> Stmt {
     Stmt::VarAssign(VariableAssignment {
         name: name.to_string(),
         value,
+        span: span(),
+    })
+}
+
+pub fn break_stmt() -> Stmt {
+    Stmt::Break(BreakStmt {
         span: span(),
     })
 }
