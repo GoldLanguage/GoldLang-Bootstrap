@@ -1,7 +1,7 @@
 use super::*;
 
 #[cfg(test)]
-mod dead_code_analysis_tests {
+mod unreachable_branch_analysis_tests {
     use super::*;
 
     #[test]
