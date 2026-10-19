@@ -19,6 +19,48 @@ mod var_multi_decl_tests {
     }
 
     #[test]
+    fn var_name_taken_by_same_func_errors() {
+        let literals = get_all_literals();
+
+        for (l, t) in literals.iter().zip(ALL_TYPES_WITH_DYN_ARR.iter()) {
+            let pair_body = vec![return_stmt(vec![l.clone()])];
+            let pair = returning_func("pair", vec![], vec![t.clone()], pair_body);
+
+            let vars = vec![
+                MultiVariableDeclaration { name: "main".to_string(), type_name: t.clone(), span: span() },
+            ];
+            let body = vec![Stmt::VarDeclMulti(vars, call_expr("pair", vec![]))];
+            let main = void_func("main", vec![], body);
+
+            let mut ast = AST { functions: vec![main, pair], globals: vec![] };
+            let result = check_semantics(&mut ast);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().to_string().contains("is already taken by a function"));
+        }
+    }
+
+    #[test]
+    fn var_name_taken_by_different_func_errors() {
+        let literals = get_all_literals();
+
+        for (l, t) in literals.iter().zip(ALL_TYPES_WITH_DYN_ARR.iter()) {
+            let pair_body = vec![return_stmt(vec![l.clone()])];
+            let pair = returning_func("pair", vec![], vec![t.clone()], pair_body);
+
+            let vars = vec![
+                MultiVariableDeclaration { name: "pair".to_string(), type_name: t.clone(), span: span() },
+            ];
+            let body = vec![Stmt::VarDeclMulti(vars, call_expr("pair", vec![]))];
+            let main = void_func("main", vec![], body);
+
+            let mut ast = AST { functions: vec![main, pair], globals: vec![] };
+            let result = check_semantics(&mut ast);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().to_string().contains("is already taken by a function"));
+        }
+    }
+
+    #[test]
     fn unknown_func_call_in_func_call_arg_errors() {
         let literals = get_all_literals();
 

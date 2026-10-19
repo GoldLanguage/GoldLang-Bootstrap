@@ -3,7 +3,10 @@ use super::{
     Stmt, 
     Span, 
     Expr, 
-    GoldError
+    GoldError,
+
+    BindingInfo,
+    HashMap
 };
 
 use crate::ast::{
@@ -60,7 +63,28 @@ pub fn get_bigger_type_of_two_integers(t_1: Type, t_2: Type) -> Type {
 }
 
 
+pub fn check_identifier_is_already_taken(
+    identifier: &str,
+    span: &Span,
+    locals: &mut HashMap<String, BindingInfo>, 
+    fun_sigs: &HashMap<String, (Vec<Type>, Option<Vec<Type>>)>
+) -> Result<(), GoldError> {
+    if fun_sigs.contains_key(identifier) {
+        return Err(GoldError::Semantic(format!(
+                    "Variable identifier name `{}` is already taken by a function. (line {} column {})", 
+                    identifier, span.line, span.column
+                )))
+    }
 
+    if locals.contains_key(identifier) {
+        return Err(GoldError::Semantic(format!(
+                "Variable `{}` is already declared, overshadowing is not allowed. (line {} column {})", 
+                identifier, span.line, span.column
+            )))
+    }
+
+    Ok(())
+}
 
 
 // helper to get the span of a statement (so we can point to offending code)

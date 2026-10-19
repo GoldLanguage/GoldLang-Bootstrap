@@ -1,3 +1,15 @@
+/// This file is mainly responsible for analyzing function bodies for semantics analysis, such as:
+///     1. Ensure statements are legal (i.e. a break statement must be in a loop, etc)
+///
+/// and
+///     2. Tracking ownership (variable moves, copying, etc) to ensure legality (i.e. moved
+///        variables cannot be used unless re-declared, etc)
+/// and
+///     3. Internally coercing integer types if possible depending on the context
+///
+/// P.S. No, these comments are not AI
+///
+
 use std::collections::HashMap;
 
 use crate::error::GoldError;
@@ -11,8 +23,6 @@ mod infer;
 mod helpers;
 
 
-#[cfg(test)]
-mod branch_analysis_tests; 
 
 #[cfg(test)]
 mod helpers_tests;
@@ -132,38 +142,10 @@ fn check_function(
 
     check_stmts(&func.clone(), &mut func.body, locals, &upstream_var_names, fun_sigs, false)?;
 
-
-    // Branch analysis to determine if function returns in all branches
+    // code analysis ensures no empty branches, nor dead code, and also ensures correct returning
+    // branches.
     //
-
-    // This is just to check that function has at least one statement
-    // Reason it's here and not in dead_code_snalysis is because so
-    // dead code analysis can properly error with lines.
-    //
-    let last_func_stmt = func.body.last();
-    if last_func_stmt.is_none() {
-        return Err(GoldError::Semantic(format!(
-                        "Function `{}` has no statements, empty functions are not allowed! (line {} column {})",
-                        func.name, func.span.line, func.span.column,
-                    )));
-    }
-
-    // We call dead code analysis here after check_stmts, because we want checked semantics.
-    // Semantics take priority more than dead code
-    //
-    branch_analysis::dead_code_analysis(&func.body, false)?;
-
-    // Return analysis only needs to check last statement which has return statements
-    // because dead code analysis should not let dead code pass.
-    // last statement should be always be the one actualy always returning.
-    //
-    // We only do return branch analysis if function has declared return type.
-    if func.return_type.is_some() {
-        branch_analysis::return_branch_analysis(func, last_func_stmt.unwrap(), false, false)?;
-    }
-
-    Ok(())
-
+    branch_analysis::code_analysis(&func)
 }
 
 
@@ -179,7 +161,7 @@ fn check_global_stmt(
     match globalstmt {
         GlobalStmt::Const(cons) => check_const(cons, storage, fun_sigs),
 
-        GlobalStmt::_PlaceholderDummyUntilIAddMoreStmtsHereLikeStructsAndEnums => panic!("(Compiler bug) Unimplemented")
+        GlobalStmt::_PlaceholderDummyUntilIAddMoreStmtsHereLikeStructsAndEnums => todo!()
     }
 }
 
@@ -204,7 +186,7 @@ fn check_const(
 
 
     // Validate the constant type against the expression, AND internally coerce literals if
-    // possible (i.e. int8 -> int32, etc), AND validate the constant value expression 
+    // possible (i.e. int8 becomes int32, etc), AND validate the constant value expression 
     // to ensure it is known at compile-time, AND evaluate it, and then fold it.
     //
     constants::eval_const_expr_and_fold_it(cons, storage, fun_sigs)?;
@@ -238,8 +220,6 @@ fn check_stmts(
     in_loop: bool
 
 ) -> Result<(), GoldError> {
-
-
     // Special rule: Despite fact you cannot lock/unlock variables declared upstream,
     // and function arguments are considered declared upstream, the
     // special rule, if we are not in a nested scope (i.e. the block of
@@ -259,37 +239,21 @@ fn check_stmts(
                 check_const(cons, locals, fun_sigs)?;
             },
             Stmt::VarDecl(var) => {
-                if fun_sigs.contains_key(&var.name) {
-                    return Err(GoldError::Semantic(format!(
-                                "Variable identifier name `{}` is already taken by a function. (line {} column {})", 
-                                var.name, var.span.line, var.span.column
-                            )))
-                }
+                helpers::check_identifier_is_already_taken(&var.name, &var.span, locals, fun_sigs)?;
 
                 let expr_ty = infer::infer_expr_type(&mut var.value, locals, fun_sigs, Some(var.type_name.clone()))?;
                 if expr_ty != var.type_name {
                     return Err(GoldError::Semantic(format!(
                         "Type mismatch assigning to `{}`: got `{}`, expected `{}` (line {} column {})",
                         var.name, expr_ty, var.type_name, var.span.line, var.span.column
-                    )));
+                    )))
                 }
-
-                // GoldLang commandment 1. You shall not overshadow variables
-                if locals.contains_key(&var.name) {
-                    return Err(GoldError::Semantic(format!(
-                            "Variable `{}` is already declared, overshadowing is not allowed. (line {} column {})", 
-                            var.name, var.span.line, var.span.column
-                        )))
-                }
-
 
                 let mut value_len: Option<usize> = None;
 
                 // Check if source value is a variable and if its locked or moved, and moves it
                 if let Expr::Var { name: src_name, span } = &var.value {
-                    let src = locals.get_mut(src_name).unwrap_or_else(|| panic!(
-                            "(Compiler bug) infer_expr_type should've already errored if source variable didnt exist, but it didnt. var: {var:?}"
-                        ));
+                    let src = locals.get_mut(src_name).unwrap();
 
                     match &mut src.kind {
                         BindingKind::Var { moved: src_moved, len: src_len, .. } => {
@@ -336,7 +300,7 @@ fn check_stmts(
                         }
                     }
                 );
-            }
+            },
 
             Stmt::VarDeclMulti(var_list, call_expr) => {
                 // Expect the right-hand side to be a function Call expression
@@ -359,14 +323,7 @@ fn check_stmts(
                             )));
                         }
 
-
-                        // GoldLang commandment 1. You shall not overshadow variables
-                        if locals.contains_key(&var.name) {
-                            return Err(GoldError::Semantic(format!(
-                                    "Variable `{}` is already declared, overshadowing is not allowed. (line {} column {})", 
-                                    var.name, var.span.line, var.span.column
-                                )))
-                        }
+                        helpers::check_identifier_is_already_taken(&var.name, &var.span, locals, fun_sigs)?;
 
                         // insert into locals
                         //
@@ -387,7 +344,7 @@ fn check_stmts(
                     return Err(GoldError::Semantic(format!(
                         "Multi-declarement requires only a single function call on the right-hand side (line {} column {})",
                         stmt_span.line, stmt_span.column
-                    )));
+                    )))
                 }
             }
 
@@ -408,7 +365,7 @@ fn check_stmts(
                     return Err(GoldError::Semantic(format!(
                             "Type mismatch assigning to `{}`: got `{}`, expected `{}` (line {} column {})",
                             assign.name, expr_ty, varinfo.ty, assign.span.line, assign.span.column
-                    )));
+                    )))
                 }
 
 
@@ -443,9 +400,7 @@ fn check_stmts(
                 let mut value_len: Option<usize> = None;
               
                 if let Expr::Var { name: src_name, span } = &assign.value {
-                    let src = locals.get_mut(src_name).unwrap_or_else(|| panic!(
-                                "(Compiler bug) infer_expr_type should've already errored if source variable didnt exist, but it didnt. assign: {assign:?}" 
-                            ));
+                    let src = locals.get_mut(src_name).unwrap();
 
                     match &mut src.kind {
                         BindingKind::Var { moved: src_moved, len: src_len, .. } => {
@@ -487,7 +442,7 @@ fn check_stmts(
 
                 match &mut varinfo.kind {
                     BindingKind::Var { len, .. } => *len = value_len,
-                    BindingKind::Const { .. } => panic!("(Compiler bug) Variable is const, despite our supposed earlier checks that its not. Wtf ?: {varinfo:?}")
+                    _ => unreachable!()
                  }
             },
 
@@ -613,9 +568,7 @@ fn check_stmts(
 
 
                 for var_name in var_names_to_lock {
-                    let var = locals.get_mut(&var_name).unwrap_or_else(|| {
-                        panic!("(Compiler bug) Variable doesnt exist in locals despite our earlier call to infer_expr_type shouldve checked the variable thourghly, including its existence, but apparently it didnt. expr_vec: `{expr_vec:?}`, var_name: {var_name:?}");
-                    });
+                    let var = locals.get_mut(&var_name).unwrap();
 
                     match &mut var.kind {
                         BindingKind::Var { locked, .. } => {
@@ -691,9 +644,7 @@ fn check_stmts(
 
 
                 for var_name in var_names_to_unlock {
-                    let var = locals.get_mut(&var_name).unwrap_or_else(|| {
-                        panic!("(Compiler bug) Variable doesnt exist in locals despite our earlier call to infer_expr_type shouldve checked the variable thourghly, including its existence, but apparently it didnt. expr_vec: `{expr_vec:?}`, var_name: {var_name:?}")
-                    });
+                    let var = locals.get_mut(&var_name).unwrap();
 
                     match &mut var.kind {
                         BindingKind::Var { locked, .. } => {
@@ -733,7 +684,7 @@ fn check_stmts(
                     Some(declared_ty_vec) => {
                         if declared_ty_vec.len() != expr_vec.len() {
                             return Err(GoldError::Semantic(format!(
-                                    "Return length mismatch in `{}`: got `{}` expressions, expected `{}` expressions (line {} column {})",
+                                    "Return length mismatch in `{}`: got {} expressions, expected {} expressions (line {} column {})",
                                     func.name, expr_vec.len(), declared_ty_vec.len(), stmt_span.line, stmt_span.column,
                                 )))
                         }
@@ -752,8 +703,7 @@ fn check_stmts(
                         }
                     }
                 }
-            }
-
+            },
 
             Stmt::For(for_stmt) => {
                 let expr_ty = infer::infer_expr_type(&mut for_stmt.value, locals, fun_sigs, None)?;
@@ -762,24 +712,16 @@ fn check_stmts(
                     return Err(GoldError::Semantic(format!(
                         "For loop statement require an expression to be evaulatable to any `Array` type, or `range(expr1, expr2)`, instead we got `{}` (line {} column {})",
                         expr_ty, stmt_span.line, stmt_span.column,
-                    )));
-                }
-
-
-                if locals.contains_key(&for_stmt.holder_name) {
-                    return Err(GoldError::Semantic(format!(
-                        "Cannot use variable name `{}` in for loop statement as it is already declared. (line {} column {})",
-                        for_stmt.holder_name, stmt_span.line, stmt_span.column,
                     )))
                 }
+
+                helpers::check_identifier_is_already_taken(&for_stmt.holder_name, &stmt_span, locals, fun_sigs)?;
 
                 // If this is a for looping over an array, move the array only if its not an array
                 // literal. i.e. its a variable that holds an array.
                 if expr_ty.is_array_type()
                     && let Expr::Var { name, .. } = &for_stmt.value {
-                    let src = locals.get_mut(name).unwrap_or_else(|| panic!(
-                        "(Compiler bug) infer_expr_type should've already errored if the array variable didnt exist, but it didnt. for_stmt: {for_stmt:?}"
-                    ));
+                    let src = locals.get_mut(name).unwrap();
 
                     match &mut src.kind {
                         BindingKind::Var { moved: src_moved, .. } => {
@@ -798,29 +740,25 @@ fn check_stmts(
 
                 let mut locals_clone = locals.clone();
 
+                let local_fake_var_ty: Type = match expr_ty {
+                    Type::Array(inner_ty) |
+                    Type::FixedArray(inner_ty, _) => *inner_ty,
+
+                    // Since earlier we checked to see if for stmt is array type, or a rangecall
+                    // expression, we know rangecall evaluates to integer, so, this means
+                    // rangecall. 
+                    //
+                    other if other.is_integer_type() => other,
+
+                    _ => unreachable!()
+                };
+
+
                 // We inject the holder variable into the locals. It is "fake" variable that does
                 // not exist in the AST, but we need it in locals to make analysis work.
                 //
 
-                let decided_ty: Type;
-
-                if let Type::Array(inner_ty) = expr_ty {
-                    decided_ty = *inner_ty;
-
-                } else if let Type::FixedArray(inner_ty, _) = expr_ty {
-                    decided_ty = *inner_ty;
-                    
-                } else if expr_ty.is_integer_type() {
-                    decided_ty = expr_ty;
-                } else {
-                    panic!(
-                        "(Compiler bug) Expected for loop expression to either be an array or an integer (more precisely an integer cuz programmer used range()), instead we got: {:?} {:?}", 
-                        for_stmt.value, expr_ty);
-                }
-
-
-
-                // NOTE only specific if decided_ty is of an array: 
+                // NOTE that's only relevant if `local_fake_var_ty` is of an array type: 
                 //      Out-of-bounds access protection here is non-existent, but thats fine because Rust
                 //      will catch at transpile layer
                 //      However it would be nicer if we can do better job of catching out of bounds
@@ -829,7 +767,7 @@ fn check_stmts(
                 locals_clone.insert(
                     for_stmt.holder_name.clone(),
                     BindingInfo {
-                        ty: decided_ty,
+                        ty: local_fake_var_ty,
                         kind: BindingKind::Var {
                             value: None,
                             moved: false,
@@ -846,24 +784,22 @@ fn check_stmts(
                     upstream.push(var_name.clone());
                 }
 
-                // We also add holder_name to the list to prevent programmer overshadowing the
+                // We also add holder_name to the upstream list to prevent programmer overshadowing the
                 // variable within the loop.
                 upstream.push(for_stmt.holder_name.clone());
 
-                    
                 check_stmts(func, &mut for_stmt.branch, &mut locals_clone, upstream.as_slice(), fun_sigs, true)?;
                 update_local_assignments_from_clone(locals, locals_clone);
-            }
-
+            },
 
             Stmt::While(while_stmt) => {
-                let expr_ty = infer::infer_expr_type(&mut while_stmt.condition, locals, fun_sigs, Some(Type::Bool))?;
+                let expr_ty = infer::infer_expr_type(&mut while_stmt.condition, locals, fun_sigs, None).unwrap();
                 
                 if expr_ty != Type::Bool {
                     return Err(GoldError::Semantic(format!(
                         "While statement require an expression to be evaulatable to type `bool`, instead we got `{}` (line {} column {})",
-                        expr_ty, stmt_span.line, stmt_span.column,
-                    )));
+                        expr_ty, stmt_span.line, stmt_span.column
+                    )))
                 }
 
                 // This gets all upstream variable names, and passes it to check stmts to ensure
@@ -877,8 +813,7 @@ fn check_stmts(
                 check_stmts(func, &mut while_stmt.branch, &mut locals_clone, upstream.as_slice(), fun_sigs, true)?;
                 update_local_assignments_from_clone(locals, locals_clone);
                 
-            }
-
+            },
             Stmt::Infinite(infinite_stmt) => {
                 // This gets all upstream variable names, and passes it to check stmts to ensure
                 // you cannot overshadow them.
@@ -891,9 +826,7 @@ fn check_stmts(
                 check_stmts(func, &mut infinite_stmt.branch, &mut locals_clone, upstream.as_slice(), fun_sigs, true)?;
                 update_local_assignments_from_clone(locals, locals_clone);
                 
-            }
-
-
+            },
 
             Stmt::Break(break_stmt) => {
                 if !in_loop {
@@ -915,13 +848,13 @@ fn check_stmts(
             }
 
             Stmt::If(if_stmt) => {
-                let main_expr_ty = infer::infer_expr_type(&mut if_stmt.condition, locals, fun_sigs, Some(Type::Bool))?;
+                let main_expr_ty = infer::infer_expr_type(&mut if_stmt.condition, locals, fun_sigs, None).unwrap();
                 
                 if main_expr_ty != Type::Bool {
                     return Err(GoldError::Semantic(format!(
                         "If statement require an expression to be evaulatable to type `bool`, instead we got `{}` (line {} column {})",
-                        main_expr_ty, stmt_span.line, stmt_span.column,
-                    )));
+                        main_expr_ty, stmt_span.line, stmt_span.column
+                    )))
                 }
 
                 // This gets all upstream variable names, and passes it to check stmts to ensure
@@ -935,7 +868,6 @@ fn check_stmts(
                 // state.
                 let locals_clone = locals.clone();
 
-                    
                 let mut main_locals_clone = locals.clone();
                 let mut else_locals_clone = locals.clone();
 
@@ -944,13 +876,13 @@ fn check_stmts(
                 
 
                 for s in &mut if_stmt.elif_branches {
-                    let elif_expr_ty = infer::infer_expr_type(&mut s.0, locals, fun_sigs, Some(Type::Bool))?; 
+                    let elif_expr_ty = infer::infer_expr_type(&mut s.0, locals, fun_sigs, None).unwrap();
 
                     if elif_expr_ty != Type::Bool {
                         return Err(GoldError::Semantic(format!(
                             "Elif statements require an expression to be evaulatable to type `bool`, instead we got `{}` (line {} column {})",
-                            elif_expr_ty, stmt_span.line, stmt_span.column,
-                        )));
+                            elif_expr_ty, stmt_span.line, stmt_span.column
+                        )))
                     }
 
                 
@@ -1040,9 +972,7 @@ fn check_call(
 
         // If this arg is a variable, mark it moved (same semantics as before)
         if let Expr::Var { name: vname, span: _ } = arg_expr {
-            let v = locals.get_mut(vname).unwrap_or_else(|| panic!(
-                    "(Compiler bug) infer_expr_type should've already errored if source argument variable didnt exist, but it didnt. arg_expr: {arg_expr:?}" 
-                ));
+            let v = locals.get_mut(vname).unwrap();
 
             match &mut v.kind {
                 BindingKind::Var { moved, ..} => {

@@ -7,6 +7,9 @@ pub mod consts;
 pub mod ast;
 #[cfg(test)]
 mod tests_consts;
+#[cfg(test)]
+mod semantic_test_helpers;
+
 
 pub enum CompileInfo {
     CompileTo(String),

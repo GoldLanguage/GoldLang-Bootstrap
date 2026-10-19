@@ -18,14 +18,19 @@
 - Documentation is forced for functions, structs, and constants.
 - No type inference, everything must be explicilty stated (this prevents common errors that stems especially from numeric types and assumptions.).
 - No overshadowing allowed. Making codebases easier to audit, and reducing likelyhood of logic bugs.
-- `lock` and `unlock` statements allow you to declare "zones" where variables behave as constants.
+- `lock` and `unlock` statements allow you to declare "zones" where variables behave as constants, protecting you from yourself .
 
 
 **GoldLang**'s bootstrap compiler transpiles down to pure Rust for a mathematical guarantee of safety: `"If Rust is safe, then GoldLang must also be at least as safe as Rust"`.
 
 # Work-in-progress
 This bootstrap compiler implements parser, semantic analysis and enforcement, and the transpiler.
-It still lacks: structs and methods, enums, unsafe blocks.
+It still lacks: structs, and methods, enums, unsafe blocks.
+
+**NOTE**: **This project is just a hobby language** with design objective of being the safest and most readable systems programming language, but ***there is no legal guarantees that comes with using this project***
+
+**NOTE**: This compiler is a *phase 1* bootstrap compiler, it's not meant for developing production software, ***it's only meant for bootstrapping the language***
+
 
 # Compiling the bootstrap compiler.
 **Note**: The latest commit in main branch is always the latest stable release.
@@ -45,13 +50,6 @@ The compiler binary will be located in `target/release/goldlang`. Feel free to m
 ./goldlang SOURCE_CODE_PATH.gold TARGET_BINARY_PATH
 ```
 That will compile a GoldLang file, and produce a binary at `TARGET_BINARY_PATH`.
-
-
-**NOTE**: **This project is just a hobby language** with design objective of being the safest and most readable systems programming language!
-**There is no guarantees that comes with using this project, I am just 1 person making this programming language for myself, and I've decided to open-source it for others, because I was looking for a language just like this, and I couldn't find, so I decided to make it.**
-
-**NOTE**: **This compiler is a phase 1 bootstrap compiler, it's not meant for systems development. it's only meant for bootstrapping the language**
-
 
 
 # Example syntax

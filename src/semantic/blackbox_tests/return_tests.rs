@@ -19,7 +19,7 @@ mod return_tests {
             let mut ast = ast_one(func);
             let result = check_semantics(&mut ast);
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("Dead code detected"));
+            assert!(result.unwrap_err().to_string().contains("Unreachable statement"));
         }
     }
 
@@ -35,9 +35,7 @@ mod return_tests {
             let mut ast = ast_one(func);
             let result = check_semantics(&mut ast);
             assert!(result.is_err());
-            let err = result.unwrap_err().to_string();
-            assert!(err.starts_with("Semantic error: Function `foo` declares return type(s)"));
-            assert!(err.contains("but statement branch body does not end with a return statement"));
+            assert!(result.unwrap_err().to_string().contains("Expected function `foo` to return, but we found no return statements"))
         }
     }
 

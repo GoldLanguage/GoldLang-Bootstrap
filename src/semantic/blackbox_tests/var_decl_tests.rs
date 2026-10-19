@@ -76,7 +76,7 @@ mod var_decl_tests {
 
 
     #[test]
-    fn test_var_decl_type_mismatch_errors() {
+    fn var_decl_type_mismatch_errors() {
         let literals_no_ints = get_all_literals_no_arr_no_ints();
 
         for t in ALL_INT_TYPES_NO_ARR {
@@ -98,7 +98,7 @@ mod var_decl_tests {
     //
 
     #[test]
-    fn test_vardecl_overshadowing_upstream_var_in_for_loop_holder_errors() {
+    fn vardecl_overshadowing_upstream_var_in_for_loop_holder_errors() {
         let literals = get_all_literals_no_arr();
         
         for (l, t) in literals.iter().zip(ALL_TYPES_NO_ARR.iter()) {
@@ -123,14 +123,14 @@ mod var_decl_tests {
 
             let result = check_semantics(&mut ast);
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("Cannot use variable name `x` in for loop statement as it is already declared"));
+            assert!(result.unwrap_err().to_string().contains("is already declared"));
         }
     }
 
 
 
     #[test]
-    fn test_vardecl_overshadowing_var_in_for_loop_errors() {
+    fn vardecl_overshadowing_var_in_for_loop_errors() {
         let literals = get_all_literals_no_arr();
         
         for (l, t) in literals.iter().zip(ALL_TYPES_NO_ARR.iter()) {
@@ -160,7 +160,7 @@ mod var_decl_tests {
 
 
     #[test]
-    fn test_vardecl_overshadowing_var_in_while_loop_errors() {
+    fn vardecl_overshadowing_var_in_while_loop_errors() {
         let literals = get_all_literals_no_arr();
         
         for (l, t) in literals.iter().zip(ALL_TYPES_NO_ARR.iter()) {
@@ -184,7 +184,7 @@ mod var_decl_tests {
     }
 
     #[test]
-    fn test_vardecl_overshadowing_var_in_infinite_loop_errors() {
+    fn vardecl_overshadowing_var_in_infinite_loop_errors() {
         let literals = get_all_literals_no_arr();
         
         for (l, t) in literals.iter().zip(ALL_TYPES_NO_ARR.iter()) {
@@ -209,7 +209,7 @@ mod var_decl_tests {
 
 
     #[test]
-    fn test_vardecl_overshadowing_var_in_if_main_branch_errors() {
+    fn vardecl_overshadowing_var_in_if_main_branch_errors() {
         let literals = get_all_literals_no_arr();
         
         for (l, t) in literals.iter().zip(ALL_TYPES_NO_ARR.iter()) {
@@ -236,7 +236,7 @@ mod var_decl_tests {
 
 
     #[test]
-    fn test_vardecl_overshadowing_var_in_if_else_branch_errors() {
+    fn vardecl_overshadowing_var_in_if_else_branch_errors() {
         let literals = get_all_literals_no_arr();
         
         for (l, t) in literals.iter().zip(ALL_TYPES_NO_ARR.iter()) {
@@ -268,7 +268,7 @@ mod var_decl_tests {
 
 
     #[test]
-    fn test_vardecl_overshadowing_var_in_if_elif_branch_errors() {
+    fn vardecl_overshadowing_var_in_if_elif_branch_errors() {
         let literals = get_all_literals_no_arr();
         
         for (l, t) in literals.iter().zip(ALL_TYPES_NO_ARR.iter()) {
@@ -301,7 +301,7 @@ mod var_decl_tests {
 
     // This tests  integers / floats only, against Bool / String
     #[test]
-    fn test_vardecl_type_mismatch_int_bool_errors() {
+    fn vardecl_type_mismatch_int_bool_errors() {
 
         let literals_ints_floats = get_all_literals_no_arr_str_bool();
 
@@ -330,7 +330,7 @@ mod var_decl_tests {
     }
 
     #[test]
-    fn test_use_of_undeclared_variable_other_errors() {
+    fn use_of_undeclared_variable_other_errors() {
         // Try referencing non-existent variable "y"
         for t in ALL_TYPES_NO_ARR {
             let body = vec![var_decl(true, "x", t.clone(), var_expr("y"))]; // y not declared
@@ -343,7 +343,7 @@ mod var_decl_tests {
     }
 
     #[test]
-    fn test_use_of_undeclared_variable_ourself_errors() {
+    fn use_of_undeclared_variable_ourself_errors() {
         // Try referencing non-existent variable "x" aka ourselves.
         for t in ALL_TYPES_NO_ARR {
             let body = vec![var_decl(true, "x", t.clone(), var_expr("x"))]; // x not declared
