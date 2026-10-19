@@ -194,8 +194,15 @@ fn unreachable_code_branch_analysis_hazmat(
                 // continue) because whatever after it, is for sure unreachable. :)
                 //
                 certain_stop_detected = (if_branch_returns || if_branch_stops) && (elif_branches_returns || elif_branches_stops) && (else_branch_returns || else_branch_stops);
-            },
 
+            // Without an else branch, we cannot guarantee any cetain return or stop, but we still need to catch errors.
+            } else {
+                unreachable_code_branch_analysis_hazmat(&if_stmt.if_branch)?;
+                for s_vec in &if_stmt.elif_branches {
+                    unreachable_code_branch_analysis_hazmat(&s_vec.1)?;
+                }
+            },
+            
             Stmt::While(while_stmt) => (_, _) = unreachable_code_branch_analysis_hazmat(&while_stmt.branch)?,
             Stmt::For(for_stmt) => (_, _) = unreachable_code_branch_analysis_hazmat(&for_stmt.branch)?,
 
@@ -223,6 +230,8 @@ fn unreachable_code_branch_analysis_hazmat(
 fn return_branch_analysis_hazmat_wrapper(
     func: &Function
 ) -> Result<(), GoldError> {
+    assert!(func.return_type.is_some(), "Its caller responsiblity to ensure `return_branch_analysis_hazmat_wrapper` is only called on functions with declared type. There is likely a bug in your code. Func: {func:?}");
+
     fn return_branch_analysis_hazmat(
         last_stmt: &Stmt,
         depth: usize
@@ -236,7 +245,7 @@ fn return_branch_analysis_hazmat_wrapper(
                 //
                 return_branch_analysis_hazmat(&inf_stmt.branch.last().unwrap(), depth + 1)?;
                 Ok(true)
-            }
+            },
             Stmt::If(if_stmt) if let Some(else_branch) = &if_stmt.else_branch => {
                 let if_branch_returns   = return_branch_analysis_hazmat(&if_stmt.if_branch.last().unwrap(), depth)?;
                 let else_branch_returns = return_branch_analysis_hazmat(&else_branch.last().unwrap(), depth)?;
@@ -250,6 +259,14 @@ fn return_branch_analysis_hazmat_wrapper(
                 }
 
                 Ok(if_branch_returns && elif_branches_returns && else_branch_returns)
+            },
+            // This one we can't guarantee a return, but we will still analyse it to detect errors (i.e. break in infinite loop body)
+            Stmt::If(if_stmt) => {
+                return_branch_analysis_hazmat(&if_stmt.if_branch.last().unwrap(), depth)?;
+                for s_vec in &if_stmt.elif_branches {
+                    return_branch_analysis_hazmat(&s_vec.1.last().unwrap(), depth)?;
+                }
+                Ok(false)
             },
 
 
@@ -268,7 +285,7 @@ fn return_branch_analysis_hazmat_wrapper(
             // These statements don't have branches (or have failed the earlier guard checks), therefore, we can deduce for certain that they cannot return.
             //
             Stmt::While(_) | Stmt::For(_) | Stmt::Const(_) | Stmt::Expr(_) | Stmt::VarDecl(_) | Stmt::Continue(_) | Stmt::VarDeclMulti(..) | Stmt::VarAssign(_) | Stmt::VarAssignMulti(..) |
-            Stmt::Lock(_) | Stmt::Unlock(_) | Stmt::Break(_) | Stmt::If(_) => Ok(false)
+            Stmt::Lock(_) | Stmt::Unlock(_) | Stmt::Break(_) => Ok(false)
         }
     }
 
