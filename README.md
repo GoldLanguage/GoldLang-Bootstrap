@@ -25,12 +25,11 @@
 
 # Work-in-progress
 This bootstrap compiler implements parser, semantic analysis and enforcement, and the transpiler.
-It still lacks: structs and methods, enums, danger blocks.
+It still lacks: structs, and methods, enums, unsafe blocks.
 
 **NOTE**: **This project is just a hobby language** with design objective of being the safest and most readable systems programming language, but ***there is no legal guarantees that comes with using this project***
 
 **NOTE**: This compiler is a *phase 1* bootstrap compiler, it's not meant for developing production software, ***it's only meant for bootstrapping the language***
-
 
 
 # Compiling the bootstrap compiler.
